@@ -7,7 +7,7 @@ getgenv().Silent = {
         WallCheck = true,
         FOV = {
             Radius = 13,
-            Visible = true
+            Visible = false
         }
     }
 }
