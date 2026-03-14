@@ -1,0 +1,230 @@
+--// SILENT AIM
+getgenv().Silent = {
+    Setting = {
+        IsTargetting = true,
+        Prediction = 0,
+        TargetPart = "HumanoidRootPart",
+        WallCheck = true,
+        FOV = {
+            Radius = 13,
+            Visible = true
+        }
+    }
+}
+
+--// Services + Variables
+local GuiService = game:GetService("GuiService")
+local Players = cloneref(game:GetService("Players"))
+local RS = cloneref(game:GetService("RunService"))
+local UIS = cloneref(game:GetService("UserInputService"))
+local Client = Players.LocalPlayer
+local Mouse = Client:GetMouse()
+local Cam = workspace.CurrentCamera
+local Vector2New = Vector2.new
+local Inset = GuiService:GetGuiInset().Y
+
+--// VALID TARGET CHECK (ANTI-KNOCK / DEAD)
+local function isValidTarget(char)
+    if not char then return false end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return false end
+    if hum.Health <= 0 then return false end
+    if hum:GetState() == Enum.HumanoidStateType.Dead then return false end
+    if char:FindFirstChild("Knocked") then return false end
+    if char:FindFirstChild("Downed") then return false end
+    if char:FindFirstChild("KO") then return false end
+    if char:GetAttribute("Knocked") then return false end
+    if char:GetAttribute("Downed") then return false end
+    if char:GetAttribute("KO") then return false end
+    return true
+end
+
+--// ESP Toggle
+local ESPEnabled = false
+UIS.InputBegan:Connect(function(input, gpe)
+    if not gpe and input.KeyCode == Enum.KeyCode.N then
+        ESPEnabled = not ESPEnabled
+    end
+end)
+
+--// FOV Circle
+local FOV = Drawing.new("Circle")
+FOV.Transparency = 0.5
+FOV.Thickness = 1.6
+FOV.Color = Color3.fromRGB(230, 230, 250)
+FOV.Filled = true
+
+local function UpdateFOV(Radius)
+    FOV.Position = Vector2New(Mouse.X, Mouse.Y + Inset)
+    FOV.Visible = getgenv().Silent.Setting.FOV.Visible
+    FOV.Radius = Radius * 3.067
+end
+
+task.spawn(function()
+    while task.wait() do
+        UpdateFOV(getgenv().Silent.Setting.FOV.Radius)
+    end
+end)
+
+--// Wall Check
+local function WallCheck(destination, ignore)
+    if not getgenv().Silent.Setting.WallCheck then return true end
+    local Origin = Cam.CFrame.Position
+    local RayCast = Ray.new(Origin, destination - Origin)
+    return workspace:FindPartOnRayWithIgnoreList(RayCast, ignore) == nil
+end
+
+--// Get Closest Target (ANTI-KNOCK)
+local function getClosestChar()
+    local Target, Closest = nil, math.huge
+    for _, v in pairs(Players:GetPlayers()) do
+        if v ~= Client and v.Character and isValidTarget(v.Character)
+            and v.Character:FindFirstChild("HumanoidRootPart") then
+            local pos, onScreen = Cam:WorldToScreenPoint(v.Character.HumanoidRootPart.Position)
+            local dist = (Vector2New(pos.X, pos.Y) - Vector2New(Mouse.X, Mouse.Y)).Magnitude
+            if onScreen and dist < Closest and dist < FOV.Radius
+                and WallCheck(v.Character.HumanoidRootPart.Position, { Client, v.Character }) then
+                Closest = dist
+                Target = v
+            end
+        end
+    end
+    return Target
+end
+
+--// Hitbox Pool
+local HitParts = {
+    "Head",
+    "UpperTorso",
+    "LowerTorso",
+    "HumanoidRootPart",
+    "LeftUpperArm",
+    "RightUpperArm",
+    "LeftUpperLeg",
+    "RightUpperLeg"
+}
+
+--// Get Closest HitPart
+local function getClosestHitPart(char)
+    local closestPart, closestDist = nil, math.huge
+    for _, name in ipairs(HitParts) do
+        local part = char:FindFirstChild(name)
+        if part then
+            local pos, onScreen = Cam:WorldToViewportPoint(part.Position)
+            if onScreen then
+                local dist = (Vector2New(pos.X, pos.Y) - Vector2New(Mouse.X, Mouse.Y)).Magnitude
+                if dist < closestDist then
+                    closestDist = dist
+                    closestPart = part
+                end
+            end
+        end
+    end
+    return closestPart or char:FindFirstChild("HumanoidRootPart")
+end
+
+--// Hook Mouse Hit (ANTI-KNOCK)
+local Old
+Old = hookmetamethod(game, "__index", function(self, key)
+    if self:IsA("Mouse") and key == "Hit" then
+        local origin = Cam.CFrame.Position
+        local unitRay = Cam:ScreenPointToRay(Mouse.X, Mouse.Y)
+        local ray = Ray.new(origin, unitRay.Direction * 1000)
+        local hitPart, hitPos = workspace:FindPartOnRayWithIgnoreList(ray, { Client.Character })
+        if hitPart then
+            local char = hitPart:FindFirstAncestorOfClass("Model")
+            local player = Players:GetPlayerFromCharacter(char)
+            if player and player ~= Client and isValidTarget(char) then
+                return CFrame.new(hitPos)
+            end
+        end
+        local target = getClosestChar()
+        if target and target.Character then
+            local part = getClosestHitPart(target.Character)
+            if part then
+                return CFrame.new(part.Position + (part.Velocity * getgenv().Silent.Setting.Prediction))
+            end
+        end
+    end
+    return Old(self, key)
+end)
+
+--// ================================
+--// EDIT THIS VALUE ONLY
+--// 0 = no spread
+--// 100 = normal spread
+--// 200 = double spread
+--// ================================
+local SPREAD_PERCENT = 83
+--// ================================
+
+local ORIGINAL_RANDOM
+ORIGINAL_RANDOM = hookfunction(math.random, function(...)
+local args = { ... }
+
+if checkcaller() then
+return ORIGINAL_RANDOM(...)
+end
+
+-- Detect typical spread random calls
+if
+(#args == 0)
+or (args[1] == -0.05 and args[2] == 0.05)
+or (args[1] == -0.1)
+or (args[1] == -0.05)
+then
+return ORIGINAL_RANDOM(...) * (SPREAD_PERCENT / 100)
+end
+
+return ORIGINAL_RANDOM(...)
+end)
+
+--// ESP System
+local ESPObjects = {}
+
+local function createESP(player)
+    if ESPObjects[player] then return end
+    local t = Drawing.new("Text")
+    t.Color = Color3.fromRGB(255, 0, 0)
+    t.Size = 18
+    t.Center = true
+    t.Outline = true
+    t.Font = 3
+    t.Visible = false
+    t.Text = player.DisplayName
+    ESPObjects[player] = t
+end
+
+local function removeESP(player)
+    if ESPObjects[player] then
+        ESPObjects[player]:Remove()
+        ESPObjects[player] = nil
+    end
+end
+
+for _, p in pairs(Players:GetPlayers()) do
+    if p ~= Client then createESP(p) end
+end
+
+Players.PlayerAdded:Connect(function(p)
+    if p ~= Client then createESP(p) end
+end)
+
+Players.PlayerRemoving:Connect(removeESP)
+
+RS.RenderStepped:Connect(function()
+    for player, text in pairs(ESPObjects) do
+        if ESPEnabled and player.Character and isValidTarget(player.Character)
+            and player.Character:FindFirstChild("Head") then
+            local pos, onScreen = Cam:WorldToViewportPoint(
+                player.Character.Head.Position + Vector3.new(0, 2, 0)
+            )
+            text.Visible = onScreen
+            if onScreen then
+                text.Position = Vector2New(pos.X, pos.Y)
+            end
+        else
+            text.Visible = false
+        end
+    end
+end)
