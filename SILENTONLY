@@ -6,7 +6,7 @@ getgenv().Silent = {
         TargetPart = "HumanoidRootPart",
         WallCheck = true,
         FOV = {
-            Radius = 13,
+            Radius = 12.5,
             Visible = false
         }
     }
