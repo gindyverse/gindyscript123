@@ -9,6 +9,22 @@ local Cam = workspace.CurrentCamera
 local Vector2New = Vector2.new
 local Inset = GuiService:GetGuiInset().Y
 
+--// VALID TARGET CHECK (ANTI-KNOCK / DEAD)
+local function isValidTarget(char)
+    if not char then return false end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return false end
+    if hum.Health <= 0 then return false end
+    if hum:GetState() == Enum.HumanoidStateType.Dead then return false end
+    if char:FindFirstChild("Knocked") then return false end
+    if char:FindFirstChild("Downed") then return false end
+    if char:FindFirstChild("KO") then return false end
+    if char:GetAttribute("Knocked") then return false end
+    if char:GetAttribute("Downed") then return false end
+    if char:GetAttribute("KO") then return false end
+    return true
+end
+
 --// ESP Toggle
 local ESPEnabled = false
 UIS.InputBegan:Connect(function(input, gpe)
@@ -18,7 +34,7 @@ UIS.InputBegan:Connect(function(input, gpe)
 end)
 
 --// HRP Resizing (VALID TARGETS ONLY)
-local hitboxSize = Vector3.new(1.8, 2.3, 1.4)
+local hitboxSize = Vector3.new(1.7, 2.1, 1.4)
 RS.RenderStepped:Connect(function()
     for _, plr in pairs(Players:GetPlayers()) do
         if plr ~= Client and plr.Character and isValidTarget(plr.Character) then
@@ -38,7 +54,7 @@ end)
 --// 100 = normal spread
 --// 200 = double spread
 --// ================================
-local SPREAD_PERCENT = 83
+local SPREAD_PERCENT = 82
 --// ================================
 
 local ORIGINAL_RANDOM
